@@ -11,7 +11,7 @@
 #define TYPE unsigned __int128
 #define BOARD_CAP   (sizeof(TYPE) * 8)
 #define ITERATIONS  (BOARD_CAP * 2)   /* now safe to increase */
-#define IMAGE_SCALE 20
+#define IMAGE_SCALE 1
 
 #define COLOR_ON   0xE69A8D
 #define COLOR_OFF  0x16501F
