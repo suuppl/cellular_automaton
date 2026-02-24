@@ -11,7 +11,7 @@
 #define TYPE unsigned __int128
 #define BOARD_CAP   (sizeof(TYPE) * 8)
 #define ITERATIONS  (BOARD_CAP * 2)   /* now safe to increase */
-#define IMAGE_SCALE 1
+#define IMAGE_SCALE 20
 
 #define COLOR_ON   0xE69A8D
 #define COLOR_OFF  0x16501F
@@ -93,17 +93,40 @@ static void save_rule_image(
     const TYPE *board_buffer,
     uint16_t rule)
 {
-    const size_t width  = BOARD_CAP * IMAGE_SCALE;
-    const size_t height = ITERATIONS * IMAGE_SCALE;
+    const size_t logical_w = BOARD_CAP;
+    const size_t logical_h = ITERATIONS;
 
-    uint32_t *image = calloc(width * height, sizeof(uint32_t));
-    if (!image)
+    const size_t width  = logical_w * IMAGE_SCALE;
+    const size_t height = logical_h * IMAGE_SCALE;
+
+    uint8_t *logical = malloc(logical_w * logical_h);
+
+    for (size_t y = 0; y < logical_h; ++y)
     {
-        perror("calloc");
-        exit(EXIT_FAILURE);
+        TYPE row = board_buffer[y];
+        for (size_t x = 0; x < logical_w; ++x)
+        {
+            size_t bit = logical_w - 1 - x;
+            logical[y * logical_w + x] = (row >> bit) & 1;
+        }
     }
 
-    render_rule_to_buffer(board_buffer, image, width);
+    uint32_t *image = malloc(width * height * sizeof(uint32_t));
+
+    for (size_t y = 0; y < height; ++y)
+    {
+        size_t src_y = y / IMAGE_SCALE;
+        const uint8_t *src_row = &logical[src_y * logical_w];
+
+        uint32_t *dst_row = &image[y * width];
+
+        for (size_t x = 0; x < width; ++x)
+        {
+            size_t src_x = x / IMAGE_SCALE;
+            dst_row[x] =
+                (src_row[src_x] ? COLOR_ON : COLOR_OFF) | ALPHA_MASK;
+        }
+    }
 
     char filename[64];
     snprintf(filename, sizeof(filename),
@@ -122,6 +145,7 @@ static void save_rule_image(
     }
 
     free(image);
+    free(logical);
 }
 
 /* ==================== Debug ==================== */
