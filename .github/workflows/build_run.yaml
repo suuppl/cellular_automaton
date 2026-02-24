@@ -43,4 +43,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: automaton-output
-          path: out/
+          path: out_png/
