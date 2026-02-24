@@ -170,11 +170,12 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    uint32_t rng = 0xC0FFEE;
+
     for (uint16_t rule = 0; rule < 256; ++rule)
     {
         printf("Rule %u\n", rule);
 
-        uint32_t rng = 0xC0FFEE;
         TYPE board = randomBoard(&rng);
 
         for (size_t i = 0; i < ITERATIONS; ++i)
