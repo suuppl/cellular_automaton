@@ -30,6 +30,14 @@ jobs:
           stdbuf -oL -eL ./main
           echo "=== Program end ==="
 
+      - name: Convert BMP to PNG
+        run: |
+          mkdir -p out_png
+          for f in out/*.bmp; do
+            [ -e "$f" ] || continue
+            convert "$f" "out_png/$(basename "${f%.bmp}.png")"
+          done
+
       - name: Upload output images
         uses: actions/upload-artifact@v4
         with:
