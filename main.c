@@ -130,15 +130,14 @@ static void save_rule_image(
 
     char filename[64];
     snprintf(filename, sizeof(filename),
-             OUT_PATH "/%03u.png", rule);
+             OUT_PATH "/%03u.bmp", rule);
 
-    if (!stbi_write_png(
+    if (!stbi_write_bmp(
             filename,
             (int)width,
             (int)height,
             4,
-            image,
-            (int)(width * sizeof(uint32_t))))
+            image))
     {
         fprintf(stderr, "Failed to write %s\n", filename);
         exit(EXIT_FAILURE);
