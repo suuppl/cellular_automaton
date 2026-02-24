@@ -8,9 +8,12 @@
 #define TYPE unsigned __int128
 #define BOARD_CAP (sizeof(TYPE) * 8)
 #define ITERATIONS BOARD_CAP
-#define IMAGE_SCALE 5
-#define COLOR_ON 0x60
-#define COLOR_OFF 0x10
+#define IMAGE_SCALE 20
+#define COLOR_ON    0xE69A8D // #E69A8D
+#define COLOR_OFF   0x16501F // #16501F
+#ifndef OUT_PATH
+    #define OUT_PATH "./out"
+#endif
 
 // -------------------- Helper Functions --------------------
 static uint32_t xorshift32(uint32_t *rng)
@@ -51,15 +54,15 @@ void evolve(TYPE *board, uint16_t rule)
 }
 
 // -------------------- Rendering --------------------
-void render_rule_to_buffer(TYPE *board_buffer, uint8_t *dst, int stride)
+void render_rule_to_buffer(TYPE *board_buffer, uint32_t *dst, int stride)
 {
     for (size_t y = 0; y < ITERATIONS; ++y)
     {
         for (size_t x = 0; x < BOARD_CAP; ++x)
         {
             size_t bit = BOARD_CAP - 1 - x;
-            uint8_t pixel =
-                ((board_buffer[y] >> bit) & 1) ? COLOR_ON : COLOR_OFF;
+            uint32_t pixel = 
+                (((board_buffer[y] >> bit) & 1) ? COLOR_ON : COLOR_OFF) | 0xFF000000;
 
             for (size_t dy = 0; dy < IMAGE_SCALE; ++dy)
             {
@@ -77,15 +80,15 @@ void save_to_image(TYPE *board_buffer, uint16_t rule)
 {
     enum { SCALE = 10 };
     char filename[32];
-    sprintf(filename, "./out/%03d.bmp", rule);
-    uint8_t data[ITERATIONS * SCALE][BOARD_CAP * SCALE] = {0};
+    sprintf(filename, OUT_PATH"/%03d.png", rule);
+    uint32_t data[ITERATIONS * SCALE][BOARD_CAP * SCALE] = {0};
 
     for (size_t y = 0; y < ITERATIONS; ++y)
     {
         for (size_t x = 0; x < BOARD_CAP; ++x)
         {
             size_t bit = BOARD_CAP - 1 - x;
-            uint8_t pixel = (board_buffer[y] >> bit) & 1 ? COLOR_ON : COLOR_OFF;
+            uint32_t pixel = ((board_buffer[y] >> bit) & 1 ? COLOR_ON : COLOR_OFF) | 0xFF000000;
             for (size_t dy = 0; dy < SCALE; ++dy)
             {
                 for (size_t dx = 0; dx < SCALE; ++dx)
@@ -96,7 +99,7 @@ void save_to_image(TYPE *board_buffer, uint16_t rule)
         }
     }
 
-    if (!stbi_write_bmp(filename, BOARD_CAP * SCALE, ITERATIONS * SCALE, 1, data))
+    if (!stbi_write_png(filename, BOARD_CAP * SCALE, ITERATIONS * SCALE, 4, data, 0))
         exit(1);
 }
 
@@ -115,9 +118,9 @@ void save_all_rules_tiled()
     const int out_w = COLS * tile_w;
     const int out_h = ROWS * tile_h;
 
-    uint8_t *image = malloc(out_h * out_w);
+    uint32_t *image = malloc(out_h * out_w*sizeof(uint32_t));
     memset(image, 0, out_h * out_w);
-    uint8_t *image_local = malloc(tile_h * tile_w);
+    uint32_t *image_local = malloc(tile_h * tile_w*sizeof(uint32_t));
     memset(image_local, 0, tile_h * tile_w);
 
     for (uint16_t r = 0; r < 256; ++r)
@@ -144,12 +147,12 @@ void save_all_rules_tiled()
                               tile_w);
 
         char filename[64];
-        snprintf(filename, sizeof(filename), "./out/%03u.bmp", r);
-        if (!stbi_write_bmp(filename, tile_w, tile_h, 1, image_local))
+        snprintf(filename, sizeof(filename), OUT_PATH"/%03u.png", r);
+        if (!stbi_write_png(filename, tile_w, tile_h, 4, image_local, 0))
             exit(1);
     }
 
-    if (!stbi_write_bmp("./out/all.bmp", out_w, out_h, 1, image))
+    if (!stbi_write_png(OUT_PATH"/all.png", out_w, out_h, 4, image, 0))
         exit(1);
 
     free(image);
@@ -169,6 +172,17 @@ void printEvolution(TYPE board)
 // -------------------- Main --------------------
 int main()
 {
-    save_all_rules_tiled();
+    TYPE board_buffer[ITERATIONS];
+    TYPE board;
+    for(uint8_t rule =0 ; rule <= 255; ++rule){
+        printf("Rule %d\n", rule);
+        uint32_t rng = 0xC0FFEE;
+        board = randomBoard(&rng);
+        for (size_t i = 0; i < ITERATIONS; ++i){
+            board_buffer[i] = board;
+            evolve(&board, rule);
+        }
+        save_to_image(board_buffer,rule);
+    }
     return 0;
 }
