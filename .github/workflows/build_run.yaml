@@ -23,8 +23,12 @@ jobs:
       - name: Create output directory
         run: mkdir -p out
 
-      - name: Run program
-        run: ./main
+
+      - name: Run program (unbuffered output)
+        run: |
+          echo "=== Program start ==="
+          stdbuf -oL -eL ./main
+          echo "=== Program end ==="
 
       - name: Upload output images
         uses: actions/upload-artifact@v4
