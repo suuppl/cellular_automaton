@@ -174,7 +174,7 @@ int main()
 {
     TYPE board_buffer[ITERATIONS];
     TYPE board;
-    for(uint8_t rule =0 ; rule <= 255; ++rule){
+    for(uint16_t rule = 0 ; rule < 256; ++rule){
         printf("Rule %d\n", rule);
         uint32_t rng = 0xC0FFEE;
         board = randomBoard(&rng);
