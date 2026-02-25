@@ -1,4 +1,3 @@
-
 all: main
 
 main: main.c
