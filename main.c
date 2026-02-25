@@ -13,10 +13,6 @@
 
 #define ALPHA_MASK 0xFF000000
 
-#define CHAR_FULL   219
-#define CHAR_TOP    223
-#define CHAR_BOTTOM 220
-
 typedef enum {
     INIT_FIXED,
     INIT_RAND,
@@ -229,25 +225,11 @@ static void print_board_console(
     size_t width,
     size_t height)
 {
-    for (size_t y = 0; y < height; y += 2)
+    for (size_t y = 0; y < height; ++y)
     {
-        const uint8_t *top = &board[y * width];
-        const uint8_t *bot =
-            (y + 1 < height) ? &board[(y + 1) * width] : NULL;
-
+        const uint8_t *row = &board[y * width];
         for (size_t x = 0; x < width; ++x)
-        {
-            uint8_t t = top[x];
-            uint8_t b = bot ? bot[x] : 0;
-
-            unsigned char c;
-            if (t && b) c = CHAR_FULL;
-            else if (t) c = CHAR_TOP;
-            else if (b) c = CHAR_BOTTOM;
-            else c = ' ';
-
-            putchar(c);
-        }
+            putchar(row[x] ? '#' : ' ');
         putchar('\n');
     }
 }
