@@ -2,64 +2,48 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
 /* ==================== Configuration ==================== */
 
-#define COLOR_ON   0xE69A8D
-#define COLOR_OFF  0x16501F
 #define ALPHA_MASK 0xFF000000
 
-#ifndef OUT_PATH
-#define OUT_PATH "./out"
-#endif
+#define CHAR_FULL   219
+#define CHAR_TOP    223
+#define CHAR_BOTTOM 220
+
+typedef enum {
+    INIT_FIXED,
+    INIT_RAND,
+    INIT_RAND_SAME
+} InitMode;
 
 typedef struct {
     size_t board_cap;
     size_t iterations;
     size_t image_scale;
+
+    uint8_t rule;
+    int rule_all;
+
+    uint32_t fg_color;
+    uint32_t bg_color;
+
+    InitMode init_mode;
+    uint8_t *init_row;
+
+    uint32_t seed;
+    int seed_set;
+
+    int render;
+
+    char out_dir[256];
 } CAconfig;
-
-/* ==================== Command Line ==================== */
-
-static int handleCommandline(int argc, char **argv, CAconfig *config)
-{
-    config->board_cap   = 128;
-    config->iterations  = 128;
-    config->image_scale = 1;
-
-    for (int i = 1; i < argc; ++i)
-    {
-        if (strcmp(argv[i], "-w") == 0)
-        {
-            if (++i >= argc) return 1;
-            config->board_cap = strtoull(argv[i], NULL, 10);
-        }
-        else if (strcmp(argv[i], "-h") == 0)
-        {
-            if (++i >= argc) return 1;
-            config->iterations = strtoull(argv[i], NULL, 10);
-        }
-        else if (strcmp(argv[i], "-s") == 0)
-        {
-            if (++i >= argc) return 1;
-            config->image_scale = strtoull(argv[i], NULL, 10);
-        }
-        else
-        {
-            return 1;
-        }
-    }
-
-    if (config->board_cap == 0 ||
-        config->iterations == 0 ||
-        config->image_scale == 0)
-        return 1;
-
-    return 0;
-}
 
 /* ==================== RNG ==================== */
 
@@ -73,13 +57,156 @@ static uint32_t xorshift32(uint32_t *rng)
     return x;
 }
 
+/* ==================== Initialization ==================== */
+
+static void fill_row_from_value(
+    uint8_t *row,
+    size_t width,
+    uint32_t value)
+{
+    size_t x = 0;
+    while (x < width)
+    {
+        for (size_t bit = 0; bit < 32 && x < width; ++bit, ++x)
+            row[x] = (value >> bit) & 1;
+    }
+}
+
+static void fill_row_random(
+    uint8_t *row,
+    size_t width,
+    uint32_t *rng)
+{
+    size_t x = 0;
+    while (x < width)
+    {
+        uint32_t value = xorshift32(rng);
+        for (size_t bit = 0; bit < 32 && x < width; ++bit, ++x)
+            row[x] = (value >> bit) & 1;
+    }
+}
+
+/* ==================== Command Line ==================== */
+
+static int handleCommandline(int argc, char **argv, CAconfig *cfg)
+{
+    cfg->board_cap   = 128;
+    cfg->iterations  = 128;
+    cfg->image_scale = 1;
+
+    cfg->rule        = 110;
+    cfg->rule_all    = 0;
+
+    cfg->fg_color    = 0xE69A8D;
+    cfg->bg_color    = 0x16501F;
+
+    cfg->init_mode   = INIT_FIXED;
+    cfg->init_row    = NULL;
+
+    cfg->seed_set    = 0;
+    cfg->render      = 0;
+
+    strcpy(cfg->out_dir, "./out");
+
+    uint32_t fixed_init_value = 1;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        if (strcmp(argv[i], "--render") == 0)
+        {
+            cfg->render = 1;
+        }
+        else if (strcmp(argv[i], "-w") == 0)
+        {
+            if (++i >= argc) return 1;
+            cfg->board_cap = strtoull(argv[i], NULL, 10);
+        }
+        else if (strcmp(argv[i], "-h") == 0)
+        {
+            if (++i >= argc) return 1;
+            cfg->iterations = strtoull(argv[i], NULL, 10);
+        }
+        else if (strcmp(argv[i], "-s") == 0)
+        {
+            if (++i >= argc) return 1;
+            cfg->image_scale = strtoull(argv[i], NULL, 10);
+        }
+        else if (strcmp(argv[i], "-r") == 0)
+        {
+            if (++i >= argc) return 1;
+            if (strcmp(argv[i], "all") == 0)
+                cfg->rule_all = 1;
+            else
+            {
+                long r = strtol(argv[i], NULL, 10);
+                if (r < 0 || r > 255) return 1;
+                cfg->rule = (uint8_t)r;
+            }
+        }
+        else if (strcmp(argv[i], "-o") == 0)
+        {
+            if (++i >= argc) return 1;
+            strncpy(cfg->out_dir, argv[i], sizeof(cfg->out_dir) - 1);
+        }
+        else if (strcmp(argv[i], "-f") == 0)
+        {
+            if (++i >= argc) return 1;
+            cfg->fg_color = strtoul(argv[i], NULL, 0);
+        }
+        else if (strcmp(argv[i], "-b") == 0)
+        {
+            if (++i >= argc) return 1;
+            cfg->bg_color = strtoul(argv[i], NULL, 0);
+        }
+        else if (strcmp(argv[i], "-i") == 0)
+        {
+            if (++i >= argc) return 1;
+            if (strcmp(argv[i], "rand") == 0)
+                cfg->init_mode = INIT_RAND;
+            else if (strcmp(argv[i], "randsame") == 0)
+                cfg->init_mode = INIT_RAND_SAME;
+            else
+            {
+                cfg->init_mode = INIT_FIXED;
+                fixed_init_value = strtoul(argv[i], NULL, 0);
+            }
+        }
+        else if (strcmp(argv[i], "-q") == 0)
+        {
+            if (++i >= argc) return 1;
+            cfg->seed = strtoul(argv[i], NULL, 0);
+            cfg->seed_set = 1;
+        }
+        else
+        {
+            return 1;
+        }
+    }
+
+    if (!cfg->seed_set)
+        cfg->seed = (uint32_t)time(NULL);
+
+    if (cfg->init_mode != INIT_RAND)
+    {
+        cfg->init_row = malloc(cfg->board_cap);
+        uint32_t rng = cfg->seed;
+
+        if (cfg->init_mode == INIT_FIXED)
+            fill_row_from_value(cfg->init_row, cfg->board_cap, fixed_init_value);
+        else
+            fill_row_random(cfg->init_row, cfg->board_cap, &rng);
+    }
+
+    return 0;
+}
+
 /* ==================== Automaton ==================== */
 
 static void evolve_row(
     const uint8_t *prev,
     uint8_t *next,
     size_t width,
-    uint16_t rule)
+    uint8_t rule)
 {
     next[0] = 0;
     next[width - 1] = 0;
@@ -95,12 +222,42 @@ static void evolve_row(
     }
 }
 
+/* ==================== Console Rendering ==================== */
+
+static void print_board_console(
+    const uint8_t *board,
+    size_t width,
+    size_t height)
+{
+    for (size_t y = 0; y < height; y += 2)
+    {
+        const uint8_t *top = &board[y * width];
+        const uint8_t *bot =
+            (y + 1 < height) ? &board[(y + 1) * width] : NULL;
+
+        for (size_t x = 0; x < width; ++x)
+        {
+            uint8_t t = top[x];
+            uint8_t b = bot ? bot[x] : 0;
+
+            unsigned char c;
+            if (t && b) c = CHAR_FULL;
+            else if (t) c = CHAR_TOP;
+            else if (b) c = CHAR_BOTTOM;
+            else c = ' ';
+
+            putchar(c);
+        }
+        putchar('\n');
+    }
+}
+
 /* ==================== Rendering ==================== */
 
 static void save_rule_image(
     const uint8_t *board,
     const CAconfig *cfg,
-    uint16_t rule)
+    uint8_t rule)
 {
     const size_t width  = cfg->board_cap * cfg->image_scale;
     const size_t height = cfg->iterations * cfg->image_scale;
@@ -113,23 +270,23 @@ static void save_rule_image(
         const uint8_t *src_row =
             &board[src_y * cfg->board_cap];
 
-        uint32_t *dst_row = &image[y * width];
+        uint32_t *dst = &image[y * width];
 
         for (size_t x = 0; x < width; ++x)
         {
             size_t src_x = x / cfg->image_scale;
-            dst_row[x] =
-                (src_row[src_x] ? COLOR_ON : COLOR_OFF)
+            dst[x] =
+                (src_row[src_x] ? cfg->fg_color : cfg->bg_color)
                 | ALPHA_MASK;
         }
     }
 
-    char filename[64];
-    snprintf(filename, sizeof(filename),
-             OUT_PATH "/%03u.bmp", rule);
+    char path[512];
+    snprintf(path, sizeof(path),
+             "%s/%03u.bmp", cfg->out_dir, rule);
 
     stbi_write_bmp(
-        filename,
+        path,
         (int)width,
         (int)height,
         4,
@@ -146,23 +303,34 @@ int main(int argc, char **argv)
     if (handleCommandline(argc, argv, &cfg) != 0)
     {
         fprintf(stderr,
-            "Usage: %s [-w board_cap] [-h iterations] [-s image_scale]\n",
+            "Usage: %s "
+            "[-w width] [-h iterations] [-s scale] "
+            "[-r rule|all] [-i number|rand|randsame] "
+            "[-q seed] [-o dir] [-f fg] [-b bg] "
+            "[--render]\n",
             argv[0]);
         return EXIT_FAILURE;
     }
 
+    if (cfg.render)
+        mkdir(cfg.out_dir, 0755);
+
     uint8_t *board =
         malloc(cfg.board_cap * cfg.iterations);
 
-    uint32_t rng = 0xC0FFEE;
+    uint32_t rng = cfg.seed;
 
-    for (uint16_t rule = 0; rule < 256; ++rule)
+    uint8_t start = cfg.rule_all ? 0   : cfg.rule;
+    uint8_t end   = cfg.rule_all ? 255 : cfg.rule;
+
+    for (uint8_t rule = start; rule <= end; ++rule)
     {
         printf("Rule %u\n", rule);
 
-        uint8_t *row0 = &board[0];
-        for (size_t x = 0; x < cfg.board_cap; ++x)
-            row0[x] = xorshift32(&rng) & 1;
+        if (cfg.init_mode == INIT_RAND)
+            fill_row_random(board, cfg.board_cap, &rng);
+        else
+            memcpy(board, cfg.init_row, cfg.board_cap);
 
         for (size_t y = 1; y < cfg.iterations; ++y)
         {
@@ -173,9 +341,16 @@ int main(int argc, char **argv)
                 rule);
         }
 
-        save_rule_image(board, &cfg, rule);
+        if (cfg.render)
+            save_rule_image(board, &cfg, rule);
+        else
+            print_board_console(
+                board,
+                cfg.board_cap,
+                cfg.iterations);
     }
 
+    free(cfg.init_row);
     free(board);
     return 0;
 }
