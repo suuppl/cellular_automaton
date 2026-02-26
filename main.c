@@ -110,6 +110,15 @@ static void print_usage(const char *prog)
         prog);
 }
 
+uint32_t rgb_to_bgr(uint32_t rgb) {
+    uint8_t r,g,b;
+    r = (rgb >> 16) & 0xFF;
+    g = (rgb >>  8) & 0xFF;
+    b = (rgb >>  0) & 0xFF;
+
+    return b << 16 | g <<  8 | r <<  0;
+}
+
 static int handleCommandline(int argc, char **argv, CAconfig *cfg)
 {
     cfg->board_cap   = 128;
@@ -151,8 +160,8 @@ static int handleCommandline(int argc, char **argv, CAconfig *cfg)
             else cfg->rule=(uint8_t)strtoul(argv[i],NULL,10);
         }
         else if (strcmp(argv[i], "-o") == 0) { i++; strncpy(cfg->out_dir, argv[i], sizeof(cfg->out_dir)-1);}
-        else if (strcmp(argv[i], "-f") == 0) { i++; cfg->fg_color = strtoul(argv[i],NULL,0);}
-        else if (strcmp(argv[i], "-b") == 0) { i++; cfg->bg_color = strtoul(argv[i],NULL,0);}
+        else if (strcmp(argv[i], "-f") == 0) { i++; cfg->fg_color = rgb_to_bgr(strtoul(argv[i],NULL,0));}
+        else if (strcmp(argv[i], "-b") == 0) { i++; cfg->bg_color = rgb_to_bgr(strtoul(argv[i],NULL,0));}
         else if (strcmp(argv[i], "-i") == 0)
         {
             i++;
